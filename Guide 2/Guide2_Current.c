@@ -85,13 +85,64 @@ typedef struct {
 	uint8_t samples;
 } Command_line;
 typedef enum {
-	STATE_RESET, STATE_CONFIG, STATE_MANUALCTR, STATE_OPENLOOP, STATE_AUTOMATIC
-} State;
+	STATE_RESET,
+	STATE_CONFIG,
+	STATE_MANUALCTR,
+	STATE_OPENLOOP,
+	STATE_AUTOMATIC,
+	STATE_ERROR
+} Table_State;
+typedef struct {
+	Table_State State;
+	uint8_t mode;
+} Search_engine;
 
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
 	if (huart == &huart3) {
 		Flag_Enable_Parse_And_Receive = 1;
 	}
+}
+void error() {
+
+}
+void initialize_modes(Search_engine Modes[5][5]) {
+	for (uint8_t i = 0; i < 4; i++) {
+		for (uint8_t j = 0; j < 4; j++) {
+			Modes[i][j].State = STATE_ERROR;
+			Modes[i][j].mode = j;
+		}
+	}
+	Modes[STATE_RESET][0].State = STATE_RESET;
+	Modes[STATE_RESET][1].State = STATE_CONFIG;
+	Modes[STATE_CONFIG][0].State = STATE_RESET;
+	Modes[STATE_CONFIG][1].State = STATE_CONFIG;
+	Modes[STATE_CONFIG][2].State = STATE_MANUALCTR;
+	Modes[STATE_CONFIG][3].State = STATE_OPENLOOP;
+	Modes[STATE_CONFIG][4].State = STATE_AUTOMATIC;
+	Modes[STATE_MANUALCTR][1].State = STATE_CONFIG;
+	Modes[STATE_MANUALCTR][2].State = STATE_MANUALCTR;
+	Modes[STATE_MANUALCTR][3].State = STATE_OPENLOOP;
+	Modes[STATE_OPENLOOP][1].State = STATE_CONFIG;
+	Modes[STATE_OPENLOOP][2].State = STATE_MANUALCTR;
+	Modes[STATE_OPENLOOP][3].State = STATE_OPENLOOP;
+	Modes[STATE_AUTOMATIC][1].State = STATE_CONFIG;
+	Modes[STATE_AUTOMATIC][4].State = STATE_AUTOMATIC;
+
+}
+
+Table_State get_state(Search_engine Modes[5][5],Command_line *User_Inputs,Table_State Current_State) {
+	uint8_t mode=0;
+
+	mode=User_Inputs->mode;
+	if(mode<0 || mode >4){
+
+	}else{
+		Table_State Next_State=Modes[Current_State][mode].State;
+		if(Next_State == STATE_ERROR){
+			//handle error
+		}else return Next_State;
+	}
+	exit(EXIT_FAILURE);
 }
 
 uint8_t parsing(uint8_t CMD_LINE[], char *CMD_PARSED[]) {
@@ -106,52 +157,53 @@ uint8_t parsing(uint8_t CMD_LINE[], char *CMD_PARSED[]) {
 	return Space_Counter;
 }
 uint8_t search_engine(char *CMD_PARSED[], uint8_t Space_Counter,
-		Command_line User_Inputs) {
+		Command_line *User_Inputs) {
 	for (uint8_t i = 0; i < Space_Counter; i++) {
 		if (strcmp(CMD_PARSED[i], "CS") == 0) {
-			User_Inputs.mode = strtoul(CMD_PARSED[++i], NULL, 10);
-			if (User_Inputs.mode > 4) {
-				User_Inputs.mode=0;
-				return 1;
+			User_Inputs->mode = strtoul(CMD_PARSED[++i], NULL, 10);
+			if (User_Inputs->mode > 4) {
+				User_Inputs->mode = 0;
+				return 1 ;
 			}
 		} else if (strcmp(CMD_PARSED[i], "EN") == 0) {
-			User_Inputs.enable = strtoul(CMD_PARSED[++i], NULL, 10);
-			if (User_Inputs.enable > 1) {
-				User_Inputs.enable=0;
+			User_Inputs->enable = strtoul(CMD_PARSED[++i], NULL, 10);
+			if (User_Inputs->enable > 1) {
+				User_Inputs->enable = 0;
 				return 2;
 			}
 
 		} else if (strcmp(CMD_PARSED[i], "HW") == 0) {
-			User_Inputs.period = strtoul(CMD_PARSED[++i], NULL, 10);
-			if (User_Inputs.period > 1000 || User_Inputs.period < 1) {
-				User_Inputs.period=1;
+			User_Inputs->period = strtoul(CMD_PARSED[++i], NULL, 10);
+			if (User_Inputs->period > 1000 || User_Inputs->period < 1) {
+				User_Inputs->period = 1;
 				return 3;
 			}
 
 		} else if (strcmp(CMD_PARSED[i], "CR") == 0) {
-			User_Inputs.continuous_refresh = strtoul(CMD_PARSED[++i], NULL, 10);
-			if (User_Inputs.continuous_refresh > 2) {
-				User_Inputs.continuous_refresh=0;
+			User_Inputs->continuous_refresh = strtoul(CMD_PARSED[++i], NULL, 10);
+			if (User_Inputs->continuous_refresh > 2) {
+				User_Inputs->continuous_refresh = 0;
 				return 4;
 			}
 
 		} else if (strcmp(CMD_PARSED[i], "L") == 0) {
-			User_Inputs.read_pos_vel = strtoul(CMD_PARSED[++i], NULL, 10);
-			if (User_Inputs.read_pos_vel > 2) {
-				User_Inputs.read_pos_vel=0;
+			User_Inputs->read_pos_vel = strtoul(CMD_PARSED[++i], NULL, 10);
+			if (User_Inputs->read_pos_vel > 2) {
+				User_Inputs->read_pos_vel = 0;
 				return 5;
 			}
 
 		} else if (strcmp(CMD_PARSED[i], "KA") == 0) {
-			User_Inputs.samples = strtoul(CMD_PARSED[++i], NULL, 10);
-			if (User_Inputs.samples > 10000) {
-				User_Inputs.samples=0;
+			User_Inputs->samples = strtoul(CMD_PARSED[++i], NULL, 10);
+			if (User_Inputs->samples > 10000) {
+				User_Inputs->samples = 0;
 				return 6;
 			}
 		}
 	}
 	return 7;
 }
+
 /* USER CODE END 0 */
 
 /**
@@ -160,7 +212,10 @@ uint8_t search_engine(char *CMD_PARSED[], uint8_t Space_Counter,
  */
 int main(void) {
 	/* USER CODE BEGIN 1 */
-	Command_line User_Inputs={0};
+	Command_line User_Inputs = { 0 };
+	Search_engine Modes[5][5];
+	Table_State Current_State=STATE_RESET;
+	Table_State Next_State=STATE_RESET;
 	/* USER CODE END 1 */
 
 	/* MCU Configuration--------------------------------------------------------*/
@@ -187,6 +242,7 @@ int main(void) {
 	MX_USART3_UART_Init();
 	MX_TIM17_Init();
 	/* USER CODE BEGIN 2 */
+	initialize_modes(Modes);
 	HAL_UARTEx_ReceiveToIdle_DMA(&huart3, CMD_LINE, MAX_BUFFER_SIZE);
 	__HAL_DMA_DISABLE_IT(&hdma_usart3_rx, DMA_IT_HT);
 	/* USER CODE END 2 */
@@ -197,8 +253,8 @@ int main(void) {
 		if (Flag_Enable_Parse_And_Receive == 1) {
 			Flag_Enable_Parse_And_Receive = 0;
 			uint8_t Spaces_Counter = parsing(CMD_LINE, CMD_PARSED);
-			search_engine(CMD_PARSED, Spaces_Counter, User_Inputs);
-			//state_machine();
+			search_engine(CMD_PARSED, Spaces_Counter, &User_Inputs);
+			Next_State=get_state(Modes,&User_Inputs,Current_State);
 			HAL_UARTEx_ReceiveToIdle_DMA(&huart3, CMD_LINE,
 			MAX_BUFFER_SIZE);
 			__HAL_DMA_DISABLE_IT(&hdma_usart3_rx, DMA_IT_HT);
@@ -586,3 +642,4 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
+
